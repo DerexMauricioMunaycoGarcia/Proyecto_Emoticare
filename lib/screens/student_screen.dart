@@ -24,7 +24,10 @@ class _StudentScreenState extends State<StudentScreen>
   final List<String?> _respuestas = List.filled(5, null);
 
   bool _enviando = false;
-  bool _formularioValido = true;
+
+  // 👈 Indica si ya se intentó enviar el formulario al menos una vez.
+  // A partir de ese momento se muestran los errores campo por campo.
+  bool _intentoEnviar = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -65,16 +68,23 @@ class _StudentScreenState extends State<StudentScreen>
     super.dispose();
   }
 
+  // 👈 Helper: ¿el formulario completo es válido?
+  bool get _formularioCompleto =>
+      _textController.text.trim().isNotEmpty && !_respuestas.contains(null);
+
   // 🚀 Enviar formulario con análisis emocional
   Future<void> _enviarFormulario() async {
-    if (_textController.text.trim().isEmpty || _respuestas.contains(null)) {
-      setState(() => _formularioValido = false);
+    setState(() => _intentoEnviar = true);
+
+    if (!_formularioCompleto) {
+      // No mostramos un solo mensaje genérico: cada campo vacío
+      // mostrará su propio "Este campo es obligatorio" gracias a
+      // _intentoEnviar = true y al validator/errorText de cada widget.
       return;
     }
 
     setState(() {
       _enviando = true;
-      _formularioValido = true;
     });
 
     await Future.delayed(const Duration(seconds: 2));
@@ -453,7 +463,9 @@ class _StudentScreenState extends State<StudentScreen>
     for (int i = 0; i < _respuestas.length; i++) {
       _respuestas[i] = null;
     }
-    setState(() {});
+    setState(() {
+      _intentoEnviar = false; // 👈 Reiniciamos el estado de validación
+    });
   }
 
   Color _getColorForOption(String option) {
@@ -564,8 +576,9 @@ class _StudentScreenState extends State<StudentScreen>
                     _buildQuestionCard(i),
                     const SizedBox(height: 16),
                   ],
-                  if (!_formularioValido) _buildErrorWarning(),
-                  const SizedBox(height: 24),
+                  // 👈 Ya no mostramos el aviso general; cada campo
+                  // muestra su propio mensaje de error individual.
+                  const SizedBox(height: 8),
                   _buildSendButton(),
                 ],
               ),
@@ -644,6 +657,11 @@ class _StudentScreenState extends State<StudentScreen>
   }
 
   Widget _buildFreeTextSection() {
+    // 👈 Solo mostramos el error en este campo si ya se intentó enviar
+    // y el texto está vacío.
+    final bool mostrarError =
+        _intentoEnviar && _textController.text.trim().isEmpty;
+
     return Card(
       elevation: 2,
       shadowColor: Colors.black12,
@@ -668,13 +686,26 @@ class _StudentScreenState extends State<StudentScreen>
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  "Expresión libre",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
+                // 👈 Etiqueta + asterisco obligatorio
+                Row(
+                  children: const [
+                    Text(
+                      "Expresión libre",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    Text(
+                      " *",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -682,13 +713,31 @@ class _StudentScreenState extends State<StudentScreen>
             TextField(
               controller: _textController,
               maxLines: 4,
+              onChanged: (_) {
+                // 👈 Refresca el mensaje de error en tiempo real
+                if (_intentoEnviar) setState(() {});
+              },
               decoration: InputDecoration(
                 hintText: "¿Cómo te sientes hoy? Escribe libremente...",
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: mostrarError ? Colors.red : Colors.grey.shade300,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: mostrarError ? Colors.red : const Color(0xFF3B82F6),
+                    width: 2,
+                  ),
+                ),
                 filled: true,
                 fillColor: Colors.grey[50],
+                errorText: mostrarError ? "Este campo es obligatorio" : null,
               ),
             ),
           ],
@@ -698,6 +747,10 @@ class _StudentScreenState extends State<StudentScreen>
   }
 
   Widget _buildQuestionCard(int i) {
+    // 👈 Solo mostramos el error en esta pregunta si ya se intentó enviar
+    // y no se ha seleccionado una opción.
+    final bool mostrarError = _intentoEnviar && _respuestas[i] == null;
+
     return Card(
       elevation: 2,
       shadowColor: Colors.black12,
@@ -723,12 +776,27 @@ class _StudentScreenState extends State<StudentScreen>
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    _preguntas[i],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      color: Color(0xFF1E293B),
+                  // 👈 Pregunta + asterisco obligatorio
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: _preguntas[i],
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const TextSpan(
+                          text: " *",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -745,9 +813,23 @@ class _StudentScreenState extends State<StudentScreen>
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: mostrarError ? Colors.red : Colors.grey.shade300,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: mostrarError ? Colors.red : const Color(0xFF3B82F6),
+                    width: 2,
+                  ),
+                ),
                 filled: true,
                 fillColor: Colors.grey[50],
                 hintText: "Selecciona una opción",
+                errorText: mostrarError ? "Este campo es obligatorio" : null,
               ),
               items:
                   _opciones.map((opcion) {
@@ -769,36 +851,12 @@ class _StudentScreenState extends State<StudentScreen>
                       ),
                     );
                   }).toList(),
-              onChanged: (value) => setState(() => _respuestas[i] = value),
+              onChanged: (value) {
+                setState(() => _respuestas[i] = value);
+              },
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildErrorWarning() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red[200]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red[700]),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              "Por favor completa todas las respuestas antes de enviar.",
-              style: TextStyle(
-                color: Colors.red[700],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
